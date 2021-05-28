@@ -3,6 +3,7 @@ import java.util.*;
 public class Parser {
     static void parse(Scanner sc, String str) {
         if (str.length() != 0) {
+            //заносить объекты типа знак, число, переменная, а не строки
             ArrayList<String> arrayList = new ArrayList<>(); //лист для хранения операторов и операндов
             HashMap<String, Integer> values;
 
@@ -26,16 +27,10 @@ public class Parser {
                         } else {
                             nextState = States.ERROR;
                         }
-                        if (i == chars.length - 1) {
-                            arrayList.add(varBuilder.toString());
-                        }
                         break;
                     case EXP_VAR:
                         if (Character.isLetterOrDigit(c)) {
                             varBuilder.append(c);
-                            if (i == chars.length - 1) {
-                                arrayList.add(varBuilder.toString());
-                            }
                         } else if (isOperator(c)) {
                             arrayList.add(varBuilder.toString());
                             arrayList.add(String.valueOf(c));
@@ -48,9 +43,6 @@ public class Parser {
                     case EXP_NUM:
                         if (Character.isDigit(c)) {
                             varBuilder.append(c);
-                            if (i == chars.length - 1) {
-                                arrayList.add(varBuilder.toString());
-                            }
                         } else if (isOperator(c)) {
                             arrayList.add(varBuilder.toString());
                             arrayList.add(String.valueOf(c));
@@ -65,13 +57,20 @@ public class Parser {
                 }
                 currentState = nextState;
                 if (currentState == States.ERROR) {
-                    break;
+                    System.out.println("Некорректное математическое выражение! Ошибка в позиции "+ ++i);
+                    return;
                 }
             }
-            System.out.println(arrayList.toString());
+            if (varBuilder.length() != 0 && !isOperator(varBuilder.charAt(0))) {
+                arrayList.add(varBuilder.toString());
+            } else {
+                System.out.println("Математическое выражение не может оканчиваться на знак операции!");
+                return;
+            }
+
             //заполняем хэш-таблицу путем ввода значений переменных с консоли
             values = storeVars(sc, arrayList);
-            //меняем переменные на их значения
+            //меняем переменные на введенные пользователем числа
             changeVarsForNums(arrayList, values);
             //переводим инфиксную нотацию в постфиксную
             arrayList = infixToPostfix(arrayList);
@@ -81,6 +80,7 @@ public class Parser {
         } else {
             System.out.println("Введенная строка пуста!");
         }
+        System.out.println();
     }
 
     private static HashMap<String, Integer> storeVars(Scanner sc, ArrayList<String> operands) {
@@ -90,24 +90,15 @@ public class Parser {
             if (!varsNumbers.containsKey(operand) & !isInteger(operand) & !isOperator(operand.charAt(0))) {
                 System.out.println("Введите значение переменной " + operand + ":");
                 num = sc.nextInt();
+                sc.nextLine();
                 varsNumbers.put(operand, num);
             }
         }
-        varsNumbers.forEach((k, v) -> System.out.println("Key: " + k + ": Value: " + v));
         return varsNumbers;
     }
 
     private static boolean isOperator(char c) {
-        //return c == '+' || c == '-' || c == '/' || c == '*';
-        switch (c) {
-            case '+':
-            case '-':
-            case '*':
-            case '/':
-                return true;
-            default:
-                return false;
-        }
+        return c == '+' || c == '-' || c == '/' || c == '*';
     }
 
     private static boolean isInteger(String str) {
@@ -124,6 +115,7 @@ public class Parser {
         return c == '(' || c == ')';
     }*/
 
+    //метод с помощью которого переменные в ArrayList мы меняем на ранее введенные пользователем числа
     private static void changeVarsForNums(ArrayList<String> arrayList, HashMap<String, Integer> values) {
         for (int i = 0; i < arrayList.size(); i++) {
             if (values.containsKey(arrayList.get(i))) {
@@ -131,35 +123,43 @@ public class Parser {
                 arrayList.set(i, newVal);
             }
         }
-        System.out.println(arrayList.toString());
     }
 
     private static ArrayList<String> infixToPostfix(ArrayList<String> infix) {
         ArrayList<String> postfix = new ArrayList<>();
         ArrayDeque<String> operators = new ArrayDeque<>();
+        // сделать свитч и выбирать тип
         for (String s : infix) {
             if (isInteger(s)) {
                 postfix.add(s);
-            } else if (isOperator(s.charAt(0))) {
-                while (!operators.isEmpty() && hasHigherPriority(operators.peek(), s)) {
-                    postfix.add(operators.peek());
-                    operators.pop();
+            } else {
+                if (operators.isEmpty()) {
+                    operators.add(s);
+                } else if (hasHigherPriority(s, operators.peekLast())) {
+                    operators.add(s);
+                } else {
+                    while (!operators.isEmpty() && !hasHigherPriority(s, operators.peekLast())) {
+                        postfix.add(operators.removeLast());
+                    }
+                    operators.add(s);
                 }
-                operators.push(s);
             }
         }
+
         while (!operators.isEmpty()) {
-            postfix.add(operators.peek());
-            operators.pop();
+            postfix.add(operators.removeLast());
         }
-        System.out.println(postfix.toString());
+        System.out.println("\nВведенное выражение в постфиксной форме:");
+        System.out.println(postfix.toString() + "\n");
+
         return postfix;
     }
 
-    private static boolean hasHigherPriority(String stackOp, String newOp) {
-        return precedenceLevel(stackOp) > precedenceLevel(newOp);
+    private static boolean hasHigherPriority(String newOp, String stackOp) {
+        return precedenceLevel(newOp) > precedenceLevel(stackOp);
     }
 
+    //метод возвращает "вес" оператора
     private static int precedenceLevel(String op) {
         switch (op) {
             case "+":
@@ -173,9 +173,10 @@ public class Parser {
         }
     }
 
-    private static int calculateInPostfix(ArrayList<String> arrayList) {
+    private static void calculateInPostfix(ArrayList<String> arrayList) {
         ArrayDeque<Integer> stack = new ArrayDeque<>();
         int res, op1, op2;
+        //цикл for необходим, поскольку в стэк поочередно подаются данные из ArrayList, начиная с первого
         for (String s : arrayList) {
             if (isInteger(s)) {
                 stack.push(Integer.parseInt(s));
@@ -208,7 +209,6 @@ public class Parser {
                 }
             }
         }
-        System.out.println(stack.peek());
-        return stack.pop();
+        System.out.println(stack.pop());
     }
 }
